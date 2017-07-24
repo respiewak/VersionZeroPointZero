@@ -97,6 +97,8 @@ class Telescope(object):
 
     def observe(self, signal, system=None, mode='search', noise=False):
         """observe(signal, system=None, mode='search', noise=False)
+        signal -- Signal() instance
+        system -- dict key for system to use
         """
         rec = self.systems[system][0]
         bak = self.systems[system][1]
@@ -130,6 +132,8 @@ class Telescope(object):
 
         if noise :
             out += self.noise_norm * np.random.randn(Nf, Nt)**2
+
+        return out
 
     def radiometer_noise(self):
         pass
