@@ -8,69 +8,165 @@ import numpy as np
 import scipy as sp
 from . import PSS_utils as utils
 
+
+class Receiver(object):
+    def __init__(self, centfreq, bandwidth, response=None, name=None):
+        """Telescope Reciever"""
+        self._name = name
+        self._centfreq = centfreq
+        self._bandwidth = bandwidth
+        self._response = response
+
+    def __repr__(self):
+        return "Receiver({:s})".format(self._name)
+
+    @property
+    def name(self):
+        return self._name
+    @property
+    def centfreq(self):
+        return self._centfreq
+    @property
+    def bandwidth(self):
+        return self._bandwidth
+    @property
+    def response(self):
+        return self._response
+
+
+class Backend(object):
+    def __init__(self, samprate=None, name=None):
+        self._name = name
+        self._samprate = samprate
+
+    def __repr__(self):
+        return "Backend({:s})".format(self._name)
+
+    @property
+    def name(self):
+        return self._name
+    @property
+    def samprate(self):
+        return self._samprate
+
+    def fold(self, signal, P_fold, N_fold=100):
+        """fold(signal, P_fold, N_fold=100)
+        fold a signal at period=P_fold, N_fold times
+        """
+        Nt, Nf = signal.shape
+        Npbins = int(P_fold * 2*self.samprate)
+        if Npbins*N_fold > Nt:
+            print("UserWarning: not enough observed time for {:d} folds".format(N_fold))
+            N_fold = Nt // Npbins
+            w.warn("UserWarning: setting N_fold = {:d}".format(N_fold))
+        fold_sig = signal[:,Npbins:Npbins*(N_fold+1)].reshape(Nf, N_fold, Npbins)
+        return np.sum(fold_sig, axis=1)
+
+
 class Telescope(object):
-    def __init__(self, Signal_in):
-        self.signal_in = Signal_in.signal #Need to make new signal. This is the old one
-        self.f0 = Signal_in.f0
-        self.bw = Signal_in.bw
-        self.Nf = Signal_in.Nf
-        self.Nt = Signal_in.Nt
-        self.TotTime = Signal_in.TotTime
-        self.TimeBinSize = self.TotTime/self.Nt #in milliseconds
-        self.noise_norm = Signal_in.MetaData.gamma_draw_norm
-        #self.SignalSampFreq = 1/self.TimeBinSize
+    """conatains: observe(), noise(), rfi() methods"""
+    def __init__(self, aperture, area=None, name=None):
+        self._name = name
+        self._area = area
+        self._aperture = aperture
+        self._systems = {}
+        if self._area is None:
+            self._area = np.pi * (aperture/2)**2
 
-    def observe(self, telescope='GBT', Band=1400, mode='search', noise=False):
-        # Method to Downsample the simulated signal into the telescopes sampling frequency
-        # Telescope sampling frequency given in GHz
-        #TODO Adds error messages if not the correct type of file.
-        #TODO Need to write files to disk when they are large.
-        Telescope_BW = {('GBT',820): 3.125, ('GBT',1400): 12.5,('AO',327): 1.5625, ('AO',430): 1.5625, ('AO',1400): 12.5, ('AO',2300): 12.5,}
+
+    def __repr__(self):
+        return "Telescope({:s}, {:f}m)".format(self._name, self._aperture)
+
+    @property
+    def name(self):
+        return self._name
+    @property
+    def area(self):
+        return self._area
+    @property
+    def aperture(self):
+        return self._aperture
+    @property
+    def systems(self):
+        return self._systems
+
+    def add_system(self, name=None, receiver=None, backend=None):
+        """add_system(name=None, receiver=None, backend=None)
+        append new system to dict systems"""
+        self._systems[name] = (receiver, backend)
+
+    def observe(self, signal, system=None, mode='search', noise=False):
+        """observe(signal, system=None, mode='search', noise=False)
         """
-        The sampling rate for various telescope backends at given central frequencies.
-        820 GBT GUPPI: 3.125 MHz
-        1400 GBT GUPPI: 12.5 MHz
+        rec = self.systems[system][0]
+        bak = self.systems[system][1]
 
-        327 AO PUPPI: 1.5625 MHz
-        430 AO PUPPI: 1.5625 MHz
-        1400 AO PUPPI: 12.5 MHz
-        2300 AO PUPPI: 12.5 MHz
-        """
+        sig_in = signal.signal
+        dt_tel = 1/(2*bak.samprate)
+        dt_sig = signal.TotTime / signal.Nt
 
-        self.TelescopeTimeBinSize = 1/(2*Telescope_BW[telescope, Band])
+        if dt_sig == dt_tel:
+            out = sig_in
 
-        if self.TimeBinSize == self.TelescopeTimeBinSize:
-            self.signal = self.Signal_in.signal
+        elif dt_tel % dt_sig == 0:
+            SampFactor = int(dt_tel // dt_sig)
+            out = np.zeros((signal.Nf,int(self.Nt//SampFactor)))
+            for ii, row in enumerate(sig_in):
+                out[ii,:] = utils.down_sample(row, SampFactor)
+            print("Input signal sampling frequency= ", 1/dt_sig," kHz.\nTelescope sampling frequency = ",1/dt_tel," kHz")
 
-        elif self.TelescopeTimeBinSize % self.TimeBinSize == 0:
-            SampFactor = int(self.TelescopeTimeBinSize // self.TimeBinSize)
-            self.signal=np.zeros((self.Nf,int(self.Nt//SampFactor)))
-            for ii in range(self.Nf):
-                self.signal[ii,:] = utils.down_sample(self.signal_in[ii,:], SampFactor)
-            print("Input signal sampling frequency= ", 1/self.TimeBinSize," kHz.\nTelescope sampling frequency = ",1/self.TelescopeTimeBinSize," kHz")
-
-        elif self.TelescopeTimeBinSize > self.TimeBinSize:
-            self.NewLength = int(self.TotTime//self.TelescopeTimeBinSize)
-            self.signal=np.zeros((self.Nf,self.NewLength))
-            for ii in range(self.Nf):
-                self.signal[ii,:] = utils.rebin(self.signal_in[ii,:], self.NewLength)
-            print("Input signal sampling frequency= ", self.TimeBinSize," ms. Telescope sampling frequency = ",self.TelescopeTimeBinSize," ms")
+        elif dt_tel > dt_sig:
+            NewLength = int(signal.TotTime // dt_tel)
+            out=np.zeros((signal.Nf, NewLength))
+            for ii, row in enumerate(sig_in):
+                out[ii,:] = utils.rebin(row, NewLength)
+            print("Input signal sampling frequency= ", dt_sig," ms. Telescope sampling frequency = ",dt_tel," ms")
 
         else:
             # Throw error if the input signal has a lower sampling frequency than the telescope sampling frequency.
             raise ValueError("Signal Sampling Frequency Lower than Telescope Sampling Frequency")
 
-        self.NFreqBins, self.NTimeBins = self.signal.shape
+        Nt, Nf = out.shape
 
         if noise :
-            self.signal += self.noise_norm * np.random.randn(self.NFreqBins, self.NTimeBins)**2
+            out += self.noise_norm * np.random.randn(Nf, Nt)**2
+
+    def radiometer_noise(self):
+        pass
+    def rfi(self):
+        pass
+    def init_signal(self, system):
+        """init_signal(system)
+        instantiate a signal object with same Nt, Nf, bandwidth, etc
+        as the system to be used for observation"""
+        pass
 
 
 
-    def fold(self, period, N_Folds = 100):
-        self.period = period
-        self.NBinsPeriod = int(self.period // self.TelescopeTimeBinSize)
-        if self.NBinsPeriod*N_Folds > self.NTimeBins:
-            raise ValueError("Not enough time for that many foldings!")
-        self.folded = np.sum(self.signal[:,self.NBinsPeriod:self.NBinsPeriod*(N_Folds+1)].reshape(self.NFreqBins, N_Folds, self.NBinsPeriod),axis=1)
-        #TODO Tweak since losing precision with many folds. Set by overall time.
+# Convenience functions to construct GBT and AO telescopes
+#TODO: should these be pre-instantiated?
+def GBT():
+    """The 100m Green Bank Telescope"""
+    g = Telescope(100, name="GBT")
+    g.add_system(name="820_GUPPI",
+                 receiver=Receiver(820, 180, name="820"),
+                 backend=Backend(samprate=3.125, name="GUPPI"))
+    g.add_system(name="Lband_GUPPI",
+                 receiver=Receiver(1400, 400, name="Lband"),
+                 backend=Backend(samprate=12.5, name="GUPPI"))
+    return g
+
+def Arecibo():
+    """The Aricebo 300m Telescope"""
+    a = Telescope(300, name="Arecibo")
+    a.add_system(name="430_PUPPI",
+                 receiver=Receiver(430, 100, name="430"),
+                 backend=Backend(samprate=1.5625, name="PUPPI"))
+    a.add_system(name="Lband_PUPPI",
+                 receiver=Receiver(1400, 400, name="Lband"),
+                 backend=Backend(samprate=12.5, name="PUPPI"))
+    a.add_system(name="Sband_PUPPI",
+                 receiver=Receiver(1400, 400, name="Sband"),
+                 backend=Backend(samprate=12.5, name="PUPPI"))
+    return a
+
