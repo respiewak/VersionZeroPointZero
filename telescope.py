@@ -64,7 +64,7 @@ class Backend(object):
 
 
 class Telescope(object):
-    """conatains: observe(), noise(), rfi() methods"""
+    """contains: observe(), noise(), rfi() methods"""
     def __init__(self, aperture, area=None, name=None):
         self._name = name
         self._area = area
@@ -112,7 +112,7 @@ class Telescope(object):
 
         elif dt_tel % dt_sig == 0:
             SampFactor = int(dt_tel // dt_sig)
-            out = np.zeros((signal.Nf,int(self.Nt//SampFactor)))
+            out = np.zeros((signal.Nf,int(signal.Nt//SampFactor)))
             for ii, row in enumerate(sig_in):
                 out[ii,:] = utils.down_sample(row, SampFactor)
             print("Input signal sampling frequency= ", 1/dt_sig," kHz.\nTelescope sampling frequency = ",1/dt_tel," kHz")
@@ -173,4 +173,3 @@ def Arecibo():
                  receiver=Receiver(1400, 400, name="Sband"),
                  backend=Backend(samprate=12.5, name="PUPPI"))
     return a
-
