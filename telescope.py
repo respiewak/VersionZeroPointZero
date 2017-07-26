@@ -149,14 +149,15 @@ class Telescope(object):
 
 # Convenience functions to construct GBT and AO telescopes
 #TODO: should these be pre-instantiated?
+#TODO: check Receivear centfreq & bandwidth
 def GBT():
     """The 100m Green Bank Telescope"""
     g = Telescope(100, name="GBT")
     g.add_system(name="820_GUPPI",
-                 receiver=Receiver(820, 180, name="820"),
+                 receiver=Receiver(820, 180, name="820"),  # check me
                  backend=Backend(samprate=3.125, name="GUPPI"))
     g.add_system(name="Lband_GUPPI",
-                 receiver=Receiver(1400, 400, name="Lband"),
+                 receiver=Receiver(1400, 400, name="Lband"),  # check me
                  backend=Backend(samprate=12.5, name="GUPPI"))
     return g
 
@@ -164,12 +165,12 @@ def Arecibo():
     """The Aricebo 300m Telescope"""
     a = Telescope(300, name="Arecibo")
     a.add_system(name="430_PUPPI",
-                 receiver=Receiver(430, 100, name="430"),
+                 receiver=Receiver(430, 100, name="430"),  # check me
                  backend=Backend(samprate=1.5625, name="PUPPI"))
     a.add_system(name="Lband_PUPPI",
-                 receiver=Receiver(1400, 400, name="Lband"),
+                 receiver=Receiver(1410, 400, name="Lband"),  # check me
                  backend=Backend(samprate=12.5, name="PUPPI"))
     a.add_system(name="Sband_PUPPI",
-                 receiver=Receiver(1400, 400, name="Sband"),
+                 receiver=Receiver(2030, 400, name="Sband"),  # check me
                  backend=Backend(samprate=12.5, name="PUPPI"))
     return a
