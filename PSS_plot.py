@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from . import PSS_utils as utils
 
-__all__= ['profile_plot','pulse_plot','filter_bank','dynamic_spectrum','gain_pdf']
+__all__= ['profile_plot','pulse_plot','filter_bank','dynamic_spectrum','gain_pdf','plot_dispersed','joy_division_profiles']
 
 #plt.rcParams['figure.figsize'] = (8.0,6.0)
 plt.rcParams.update({'font.size': 14})
@@ -18,29 +18,52 @@ def profile_plot(signal_object, freq_bin=0, phase=False, **kwargs):
         profile = signal_object.MetaData.profile
     except:
         raise ValueError('Need to sample pulses!')
-    Nx = profile.size
+    Nx = profile.shape[1]
 
     if phase:
         Phase = np.linspace(0., 1, Nx)
-        plt.plot(Phase, profile, lw=0.7, **kwargs)
+        plt.plot(Phase, profile[0], lw=0.7, **kwargs)
         plt.xlabel('Phase')
         #plt.ylabel(Y_label)
         plt.yticks([])
         plt.ylim(0,profile.max()*1.05)
-        plt.title(Title)
-        plt.show()
 
     else:
         stop_time = signal_object.MetaData.pulsar_period
         time = np.linspace(0, stop_time, Nx)
-        plt.plot(time, profile, lw=0.7, **kwargs)
+        plt.plot(time, profile[0], lw=0.7, **kwargs)
         plt.xlabel('Time (ms)')
         #plt.ylabel(Y_label)
         plt.ylim(0,profile.max()*1.05)
         #plt.yticks([])
-        plt.title(Title)
-        plt.show()
 
+    plt.title(Title)
+    plt.show()
+    plt.close()
+
+def joy_division_profiles(pulsar_object, step=1, N=10,Title='Profile by Frequency Channel'):
+    array=pulsar_object.profile
+    try:
+        array_len = len(N)
+        jj = 0
+        for ii, jj in enumerate(N):
+            plt.plot(array[jj,:]+ii*(step),c='k')
+        n=len(N)
+    except:
+        Freq_channels = len(array[:,0])
+        Freq_step = int(Freq_channels//N)
+        for ii in range(N):
+            plt.plot(array[ii*Freq_step,:]+ii*(step),c='k')
+        n=N
+    plt.title(Title)
+    plt.xlabel('Phase')
+    plt.ylabel('Frequency Channel')
+    plt.xticks([])
+    plt.yticks([])
+    plt.xlim(0,len(array[0,:]))
+    plt.ylim(0,n*step+0.1)
+    plt.show()
+    plt.close()
 
 def pulse_plot(signal_object, N_pulses=1, pol_bin=0, freq_bin=0, start_time=0, phase=False, **kwargs):
     try:
@@ -63,8 +86,6 @@ def pulse_plot(signal_object, N_pulses=1, pol_bin=0, freq_bin=0, start_time=0, p
         plt.xlabel('Phase')
         #plt.ylabel(Y_label)
         #plt.yticks([])
-        plt.title(Title)
-        plt.show()
 
     else:
         stop_time = start_time + N_pulses*nBins_per_period*signal_object.TimeBinSize
@@ -74,8 +95,11 @@ def pulse_plot(signal_object, N_pulses=1, pol_bin=0, freq_bin=0, start_time=0, p
         plt.xlabel('Time (ms)')
         #plt.ylabel(Y_label)
         #plt.yticks([])
-        plt.title(Title)
-        plt.show()
+
+    plt.title(Title)
+    plt.show()
+    plt.close()
+
 
 def filter_bank(signal_object, grid=False, N_pulses=1, start_time=0, phase=False, **kwargs):
     try:
@@ -107,8 +131,6 @@ def filter_bank(signal_object, grid=False, N_pulses=1, start_time=0, phase=False
             ax.set_xticks(np.linspace(Extent[0], Extent[1], N_pulses*10), minor=True);
             ax.set_yticks(np.linspace(Extent[2], Extent[3], signal_object.Nf), minor=True);
             ax.grid(which='both', color='black', linestyle='-', linewidth=0.5)
-        plt.title(Title)
-        plt.show()
 
     else:
         time = len(signal_object.signal[0,:])
@@ -124,8 +146,10 @@ def filter_bank(signal_object, grid=False, N_pulses=1, start_time=0, phase=False
             ax.set_xticks(np.linspace(Extent[0], Extent[1], 20), minor=True);
             ax.set_yticks(np.linspace(Extent[2], Extent[3], signal_object.Nf), minor=True);
             ax.grid(which='both', color='black', linestyle='-', linewidth=0.5)
-        plt.title(Title)
-        plt.show()
+
+    plt.title(Title)
+    plt.show()
+    plt.close()
 
 def gain_pdf(image_screen, which_sample='middle'):
 
@@ -151,6 +175,8 @@ def gain_pdf(image_screen, which_sample='middle'):
     plt.yticks([])
     plt.legend(loc='upper right')
     plt.show()
+    plt.close()
+
 
 def dynamic_spectrum(image_screen, signal_object, save=False, window_size = 'optimal', **kwargs):
     """
@@ -169,7 +195,7 @@ def dynamic_spectrum(image_screen, signal_object, save=False, window_size = 'opt
         Normalized_Intensity -= Normalized_Intensity.mean()
         #Mean of gain should be 1, but will vary in different realizations.
 
-    ACF = utils.acf2d(Normalized_Intensity, mode='same')
+    ACF = utils.acf2d(Normalized_Intensity, mode='same') #2d autocorrelation
     ACF /= np.amax(ACF)
     middle_freq, middle_time = np.unravel_index(np.argmax(ACF), ACF.shape)
 
@@ -198,10 +224,10 @@ def dynamic_spectrum(image_screen, signal_object, save=False, window_size = 'opt
         time_factor = 50
         freq_frame_size = int(scint_bandwidth//S.freqBinSize)*freq_factor
         time_frame_size = scint_timescale*time_factor
-        while 2*freq_frame_size > S.Nf:
+        while 2*freq_frame_size > S.Nf and freq_factor > 2:
             freq_factor -= 2
             freq_frame_size = int(scint_bandwidth//S.freqBinSize)*freq_factor
-        while 2*time_frame_size > S.MetaData.PhScreen_Nx:
+        while 2*time_frame_size > S.MetaData.PhScreen_Nx and time_factor > 2:
             time_factor -= 2
             time_frame_size = scint_timescale*time_factor
 
@@ -237,14 +263,14 @@ def dynamic_spectrum(image_screen, signal_object, save=False, window_size = 'opt
         DM = 'NA'
     if round(S.MetaData.DISS_decorr_bw_f0) ==0:
         freq_units = ' kHZ'
-        unit_factor =1e3
+        unit_factor = 1e3
     else:
         freq_units = ' MHZ'
-        unit_factor =1e3
+        unit_factor = 1
 
     f.suptitle('Spacial Dynamic Spectra Check, DM= '+ str(DM)+'\n Input Scintillation BW=' + \
-                str(round(S.MetaData.DISS_decorr_bw_f0,3)) + freq_units \
-                +'\n Measured Scintillation BW=' + str(scint_bandwidth) + freq_units)
+                str(unit_factor*round(S.MetaData.DISS_decorr_bw_f0,3)) + freq_units \
+                +'\n Measured Scintillation BW=' + str(unit_factor*scint_bandwidth) + freq_units)
 
     ax[0, 1].plot(time_lag, ACF[middle_freq, middle_time-time_frame_size\
                                 :middle_time+time_frame_size])
@@ -259,3 +285,29 @@ def dynamic_spectrum(image_screen, signal_object, save=False, window_size = 'opt
         f.savefig('DynamicSpectrum_f0_' + str(S1.f0)+'MHz_DM_'+str(DM))
     plt.draw()
     plt.show()
+    plt.close()
+
+
+def plot_dispersed(signal_object, N_pulses = 2, channel = 0, **kwargs): # Plots dispersed sig produced in ISM with Disperse()
+    lim = N_pulses*signal_object.MetaData.nBins_per_period
+    psr_period = signal_object.MetaData.pulsar_period
+    if signal_object.SignalType == 'voltage':
+        plt.title('Voltage vs. Time')
+        plt.ylabel('Voltage')
+        plt.xlabel('Time (ms)')
+        plt.xlim(0,psr_period)
+    elif signal_object.SignalType == 'intensity':
+        plt.title('Intensity vs. Time')
+        plt.ylabel('Intensity')
+        plt.xlabel('Time (ms)')
+        plt.xlim(0,psr_period)
+    plt.yticks([])
+    max_lower = np.amax(signal_object.signal[channel,:lim])
+    min_upper = np.amin(signal_object.undispersedsig[channel,:lim])
+    jump = max_lower + np.abs(min_upper) + 4
+    t = np.linspace(0,psr_period,lim)
+    plt.plot(t, signal_object.undispersedsig[channel,:lim]+jump, c='k', **kwargs)
+    plt.plot(t, signal_object.signal[channel,:lim], c='c', **kwargs)
+    plt.show()
+    plt.close()
+    # TODO flag about if it hasn't been dispersed yet
